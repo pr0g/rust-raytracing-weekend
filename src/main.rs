@@ -148,13 +148,17 @@ fn cross(lhs: &Vec3, rhs: &Vec3) -> Vec3 {
     }
 }
 
-fn hit_sphere(sphere: &Sphere, ray: &Ray) -> bool {
+fn hit_sphere(sphere: &Sphere, ray: &Ray) -> Option<f32> {
     let oc = &ray.origin - &sphere.center;
     let a = length_sq(&ray.direction);
     let b = 2f32 * dot(&oc, &ray.direction);
     let c = length_sq(&oc) - sphere.radius * sphere.radius;
     let discriminant = b * b - 4f32 * a * c;
-    discriminant > 0f32
+    if discriminant < 0f32 {
+        None
+    } else {
+        Some((-b - discriminant.sqrt()) / (2f32 * a))
+    }
 }
 
 fn create_ppm_file() -> std::io::Result<()> {
@@ -186,12 +190,16 @@ fn create_ppm_file() -> std::io::Result<()> {
                 &(&(&lower_left_corner + &(&horizontal * u)) + &(&vertical * v)),
             );
 
-            let col = if hit_sphere(&Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32), &ray) {
-                Vec3::new(1f32, 0f32, 0f32)
-            } else {
-                let unit_dir = normalize(&ray.direction);
-                let t = 0.5f32 * unit_dir.y + 1f32;
-                &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
+            let col = match hit_sphere(&Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32), &ray) {
+                Some(t) => {
+                    let normal = normalize(&(&ray.point_at_t(t) - &Vec3::new(0f32, 0f32, -1f32)));
+                    &Vec3::new(normal.x + 1f32, normal.y + 1f32, normal.z + 1f32) * 0.5f32
+                },
+                None => {
+                    let unit_dir = normalize(&ray.direction);
+                    let t = 0.5f32 * unit_dir.y + 1f32;
+                    &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
+                }
             };
 
             let (ir, ig, ib) = (
@@ -469,7 +477,7 @@ mod tests {
             &Ray::new(&Vec3::zero(), &Vec3::new(0f32, 0f32, -1f32)),
         );
 
-        assert!(hit);
+        assert!(hit.is_some());
     }
 
     #[test]
@@ -479,6 +487,6 @@ mod tests {
             &Ray::new(&Vec3::new(0f32, 1f32, 0f32), &Vec3::new(0f32, 0f32, -1f32)),
         );
 
-        assert!(!hit);
+        assert!(hit.is_none());
     }
 }
