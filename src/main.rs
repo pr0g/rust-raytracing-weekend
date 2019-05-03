@@ -11,12 +11,15 @@ use std::time::Duration;
 #[derive(Clone, Copy, Debug)]
 pub struct Ray {
     origin: Vec3,
-    direction: Vec3
+    direction: Vec3,
 }
 
 impl Ray {
     fn new(origin: &Vec3, direction: &Vec3) -> Self {
-        Ray { origin: *origin, direction: *direction }
+        Ray {
+            origin: *origin,
+            direction: *direction,
+        }
     }
 
     fn point_at_t(&self, t: f32) -> Vec3 {
@@ -35,6 +38,14 @@ impl Vec3 {
     fn zero() -> Self {
         Vec3 {
             ..Default::default()
+        }
+    }
+
+    fn one() -> Self {
+        Vec3 {
+            x: 1f32,
+            y: 1f32,
+            z: 1f32,
         }
     }
 
@@ -137,18 +148,32 @@ fn create_ppm_file() -> std::io::Result<()> {
     let height = 100;
     writer.write_fmt(format_args!("P3\n{} {}\n255\n", width, height))?;
 
+    let lower_left_corner = Vec3::new(-2_f32, -1_f32, -1_f32);
+    let horizontal = Vec3::new(4f32, 0f32, 0f32);
+    let vertical = Vec3::new(0f32, 2f32, 0f32);
+    let origin = Vec3::zero();
+
     for y in (0..height).rev() {
         for x in 0..width {
-            let rgb = Vec3::new(
-                x as f32 / (width - 1) as f32,
-                y as f32 / (height - 1) as f32,
-                0.2_f32,
+            let u = x as f32 / (width - 1) as f32;
+            let v = y as f32 / (height - 1) as f32;
+            let ray = Ray::new(
+                &origin,
+                &(&(&lower_left_corner + &(&horizontal * u)) + &(&vertical * v)),
             );
+
+            let col = {
+                let unit_dir = normalize(&ray.direction);
+                let t = 0.5f32 * unit_dir.y + 1f32;
+                &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
+            };
+
             let (ir, ig, ib) = (
-                (255_f32 * rgb.x) as i32,
-                (255_f32 * rgb.y) as i32,
-                (255_f32 * rgb.z) as i32,
+                (255_f32 * col.x) as i32,
+                (255_f32 * col.y) as i32,
+                (255_f32 * col.z) as i32,
             );
+
             writer.write_fmt(format_args!("{} {} {}\n", ir, ig, ib))?;
         }
     }
@@ -201,8 +226,8 @@ mod tests {
     use super::length;
     use super::length_sq;
     use super::normalize;
-    use super::Vec3;
     use super::Ray;
+    use super::Vec3;
 
     #[test]
     fn vec3_zero() {
@@ -374,8 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn ray_create()
-    {
+    fn ray_create() {
         let ray = Ray::new(&Vec3::zero(), &Vec3::new(1_f32, 0_f32, 0_f32));
 
         assert_eq!(ray.origin.x, 0_f32);
@@ -388,8 +412,7 @@ mod tests {
     }
 
     #[test]
-    fn ray_point_at_t()
-    {
+    fn ray_point_at_t() {
         let ray = Ray::new(&Vec3::zero(), &Vec3::new(10_f32, 0_f32, 0_f32));
         let halfway_point = ray.point_at_t(0.5_f32);
 
@@ -405,7 +428,7 @@ mod tests {
 
         let ray = Ray::new(&Vec3::zero(), &Vec3::new(20_f32, 0_f32, 20_f32));
         let halfway_point = ray.point_at_t(0.5_f32);
-        
+
         assert_eq!(halfway_point.x, 10_f32);
         assert_eq!(halfway_point.y, 0_f32);
         assert_eq!(halfway_point.z, 10_f32);
