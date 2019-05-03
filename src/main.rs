@@ -9,7 +9,22 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug)]
-pub struct Ray {
+struct Sphere {
+    center: Vec3,
+    radius: f32,
+}
+
+impl Sphere {
+    fn new(center: &Vec3, radius: f32) -> Self {
+        Sphere {
+            center: *center,
+            radius,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Ray {
     origin: Vec3,
     direction: Vec3,
 }
@@ -28,7 +43,7 @@ impl Ray {
 }
 
 #[derive(Clone, Copy, Default, Debug)]
-pub struct Vec3 {
+struct Vec3 {
     x: f32,
     y: f32,
     z: f32,
@@ -133,6 +148,15 @@ fn cross(lhs: &Vec3, rhs: &Vec3) -> Vec3 {
     }
 }
 
+fn hit_sphere(sphere: &Sphere, ray: &Ray) -> bool {
+    let oc = &ray.origin - &sphere.center;
+    let a = length_sq(&ray.direction);
+    let b = 2f32 * dot(&oc, &ray.direction);
+    let c = length_sq(&oc) - sphere.radius * sphere.radius;
+    let discriminant = b * b - 4f32 * a * c;
+    discriminant > 0f32
+}
+
 fn create_ppm_file() -> std::io::Result<()> {
     let file = OpenOptions::new()
         .write(true)
@@ -162,7 +186,9 @@ fn create_ppm_file() -> std::io::Result<()> {
                 &(&(&lower_left_corner + &(&horizontal * u)) + &(&vertical * v)),
             );
 
-            let col = {
+            let col = if hit_sphere(&Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32), &ray) {
+                Vec3::new(1f32, 0f32, 0f32)
+            } else {
                 let unit_dir = normalize(&ray.direction);
                 let t = 0.5f32 * unit_dir.y + 1f32;
                 &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
@@ -223,10 +249,12 @@ fn main() -> Result<(), Box<Error>> {
 mod tests {
     use super::cross;
     use super::dot;
+    use super::hit_sphere;
     use super::length;
     use super::length_sq;
     use super::normalize;
     use super::Ray;
+    use super::Sphere;
     use super::Vec3;
 
     #[test]
@@ -432,5 +460,25 @@ mod tests {
         assert_eq!(halfway_point.x, 10_f32);
         assert_eq!(halfway_point.y, 0_f32);
         assert_eq!(halfway_point.z, 10_f32);
+    }
+
+    #[test]
+    fn ray_hit_sphere() {
+        let hit = hit_sphere(
+            &Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32),
+            &Ray::new(&Vec3::zero(), &Vec3::new(0f32, 0f32, -1f32)),
+        );
+
+        assert!(hit);
+    }
+
+    #[test]
+    fn ray_miss_sphere() {
+        let hit = hit_sphere(
+            &Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32),
+            &Ray::new(&Vec3::new(0f32, 1f32, 0f32), &Vec3::new(0f32, 0f32, -1f32)),
+        );
+
+        assert!(!hit);
     }
 }
