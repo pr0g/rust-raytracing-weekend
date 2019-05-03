@@ -8,6 +8,22 @@ use std::io::{BufWriter, Write};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::time::Duration;
 
+#[derive(Clone, Copy, Debug)]
+pub struct Ray {
+    origin: Vec3,
+    direction: Vec3
+}
+
+impl Ray {
+    fn new(origin: &Vec3, direction: &Vec3) -> Self {
+        Ray { origin: *origin, direction: *direction }
+    }
+
+    fn point_at_t(&self, t: f32) -> Vec3 {
+        &self.origin + &(&self.direction * t)
+    }
+}
+
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Vec3 {
     x: f32,
@@ -186,6 +202,7 @@ mod tests {
     use super::length_sq;
     use super::normalize;
     use super::Vec3;
+    use super::Ray;
 
     #[test]
     fn vec3_zero() {
@@ -354,5 +371,43 @@ mod tests {
         assert_eq!(cross_result.x, 0_f32);
         assert_eq!(cross_result.y, 1_f32);
         assert_eq!(cross_result.z, 0_f32);
+    }
+
+    #[test]
+    fn ray_create()
+    {
+        let ray = Ray::new(&Vec3::zero(), &Vec3::new(1_f32, 0_f32, 0_f32));
+
+        assert_eq!(ray.origin.x, 0_f32);
+        assert_eq!(ray.origin.y, 0_f32);
+        assert_eq!(ray.origin.z, 0_f32);
+
+        assert_eq!(ray.direction.x, 1_f32);
+        assert_eq!(ray.direction.y, 0_f32);
+        assert_eq!(ray.direction.z, 0_f32);
+    }
+
+    #[test]
+    fn ray_point_at_t()
+    {
+        let ray = Ray::new(&Vec3::zero(), &Vec3::new(10_f32, 0_f32, 0_f32));
+        let halfway_point = ray.point_at_t(0.5_f32);
+
+        assert_eq!(halfway_point.x, 5_f32);
+        assert_eq!(halfway_point.y, 0_f32);
+        assert_eq!(halfway_point.z, 0_f32);
+
+        let end_point = ray.point_at_t(1_f32);
+
+        assert_eq!(end_point.x, 10_f32);
+        assert_eq!(end_point.y, 0_f32);
+        assert_eq!(end_point.z, 0_f32);
+
+        let ray = Ray::new(&Vec3::zero(), &Vec3::new(20_f32, 0_f32, 20_f32));
+        let halfway_point = ray.point_at_t(0.5_f32);
+        
+        assert_eq!(halfway_point.x, 10_f32);
+        assert_eq!(halfway_point.y, 0_f32);
+        assert_eq!(halfway_point.z, 10_f32);
     }
 }
