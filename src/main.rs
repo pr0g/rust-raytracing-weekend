@@ -123,15 +123,15 @@ fn create_ppm_file() -> std::io::Result<()> {
 
     for y in (0..height).rev() {
         for x in 0..width {
-            let (r, g, b) = (
+            let rgb = Vec3::new(
                 x as f32 / (width - 1) as f32,
                 y as f32 / (height - 1) as f32,
                 0.2_f32,
             );
             let (ir, ig, ib) = (
-                (255_f32 * r) as i32,
-                (255_f32 * g) as i32,
-                (255_f32 * b) as i32,
+                (255_f32 * rgb.x) as i32,
+                (255_f32 * rgb.y) as i32,
+                (255_f32 * rgb.z) as i32,
             );
             writer.write_fmt(format_args!("{} {} {}\n", ir, ig, ib))?;
         }
