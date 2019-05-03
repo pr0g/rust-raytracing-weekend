@@ -9,6 +9,39 @@ use std::io::{BufWriter, Write};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::time::Duration;
 
+struct Hitables {
+    hitables: Vec<Box<dyn Hitable>>,
+}
+
+impl Hitables {
+    fn new() -> Self {
+        Hitables {
+            hitables: Vec::new(),
+        }
+    }
+}
+
+impl Hitable for Hitables {
+    fn hit(self: &Self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit> {
+        let mut closest_hit: Option<Hit> = None;
+        for hitable in self.hitables.iter() {
+            match hitable.hit(ray, t_min, t_max) {
+                Some(hit) => match closest_hit {
+                    Some(closest) => {
+                        if hit.t < closest.t {
+                            closest_hit = Some(closest);
+                        }
+                    }
+                    None => closest_hit = Some(hit),
+                },
+                _ => continue,
+            }
+        }
+
+        closest_hit
+    }
+}
+
 trait Hitable {
     fn hit(self: &Self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit>;
 }
@@ -45,7 +78,6 @@ impl Hitable for Sphere {
                 });
             }
         }
-
         None
     }
 }
@@ -210,6 +242,15 @@ fn create_ppm_file() -> std::io::Result<()> {
     let vertical = Vec3::new(0f32, 2f32, 0f32);
     let origin = Vec3::zero();
 
+    let mut hitables = Hitables::new();
+    hitables
+        .hitables
+        .push(Box::new(Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32)));
+    hitables.hitables.push(Box::new(Sphere::new(
+        &Vec3::new(0f32, -100.5f32, -1f32),
+        100f32,
+    )));
+
     for y in (0..height).rev() {
         for x in 0..width {
             let u = x as f32 / (width - 1) as f32;
@@ -219,12 +260,13 @@ fn create_ppm_file() -> std::io::Result<()> {
                 &(&(&lower_left_corner + &(&horizontal * u)) + &(&vertical * v)),
             );
 
-            let sphere = Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32);
-            let col = match sphere.hit(&ray, 0f32, f32::MAX) {
+            let col = match hitables.hit(&ray, 0f32, f32::MAX) {
                 Some(hit) => {
-                    let normal =
-                        normalize(&(&ray.point_at_t(hit.t) - &Vec3::new(0f32, 0f32, -1f32)));
-                    &Vec3::new(normal.x + 1f32, normal.y + 1f32, normal.z + 1f32) * 0.5f32
+                    &Vec3::new(
+                        hit.normal.x + 1f32,
+                        hit.normal.y + 1f32,
+                        hit.normal.z + 1f32,
+                    ) * 0.5f32
                 }
                 None => {
                     let unit_dir = normalize(&ray.direction);
@@ -288,10 +330,12 @@ fn main() -> Result<(), Box<Error>> {
 mod tests {
     use super::cross;
     use super::dot;
-    use super::hit_sphere;
+    use super::f32;
     use super::length;
     use super::length_sq;
     use super::normalize;
+    use super::Hitable;
+    use super::Hitables;
     use super::Ray;
     use super::Sphere;
     use super::Vec3;
@@ -503,21 +547,41 @@ mod tests {
 
     #[test]
     fn ray_hit_sphere() {
-        let hit = hit_sphere(
-            &Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32),
+        let sphere = Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32);
+        let hit = sphere.hit(
             &Ray::new(&Vec3::zero(), &Vec3::new(0f32, 0f32, -1f32)),
+            0f32,
+            f32::MAX,
         );
-
         assert!(hit.is_some());
     }
 
     #[test]
     fn ray_miss_sphere() {
-        let hit = hit_sphere(
-            &Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32),
+        let sphere = Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32);
+        let hit = sphere.hit(
             &Ray::new(&Vec3::new(0f32, 1f32, 0f32), &Vec3::new(0f32, 0f32, -1f32)),
+            0f32,
+            f32::MAX,
         );
-
         assert!(hit.is_none());
+    }
+
+    #[test]
+    fn ray_hitables() {
+        let mut hitables = Hitables::new();
+        hitables
+            .hitables
+            .push(Box::new(Sphere::new(&Vec3::new(0f32, 0f32, -5f32), 0.5f32)));
+        hitables.hitables.push(Box::new(Sphere::new(
+            &Vec3::new(0f32, 0f32, -10f32),
+            0.5f32,
+        )));
+
+        let ray = Ray::new(&Vec3::new(0f32, 0f32, 0f32), &Vec3::new(0f32, 0f32, -1f32));
+        let hit = hitables.hit(&ray, 0f32, f32::MAX);
+
+        assert!(hit.is_some());
+        assert_eq!(hit.unwrap().t, 4.5f32);
     }
 }
