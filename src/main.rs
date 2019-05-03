@@ -9,6 +9,24 @@ use std::io::{BufWriter, Write};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::time::Duration;
 
+struct Camera {
+    origin: Vec3,
+    lower_left_corner: Vec3,
+    horizontal: Vec3,
+    vertical: Vec3,
+}
+
+impl Camera {
+    fn new() -> Self {
+        Camera {
+            origin: Vec3::zero(),
+            lower_left_corner: Vec3::new(-2_f32, -1_f32, -1_f32),
+            horizontal: Vec3::new(4f32, 0f32, 0f32),
+            vertical: Vec3::new(0f32, 2f32, 0f32),
+        }
+    }
+}
+
 struct Hitables {
     hitables: Vec<Box<dyn Hitable>>,
 }
@@ -237,11 +255,6 @@ fn create_ppm_file() -> std::io::Result<()> {
     let height = 100;
     writer.write_fmt(format_args!("P3\n{} {}\n255\n", width, height))?;
 
-    let lower_left_corner = Vec3::new(-2_f32, -1_f32, -1_f32);
-    let horizontal = Vec3::new(4f32, 0f32, 0f32);
-    let vertical = Vec3::new(0f32, 2f32, 0f32);
-    let origin = Vec3::zero();
-
     let mut hitables = Hitables::new();
     hitables
         .hitables
@@ -251,13 +264,15 @@ fn create_ppm_file() -> std::io::Result<()> {
         100f32,
     )));
 
+    let camera = Camera::new();
+
     for y in (0..height).rev() {
         for x in 0..width {
             let u = x as f32 / (width - 1) as f32;
             let v = y as f32 / (height - 1) as f32;
             let ray = Ray::new(
-                &origin,
-                &(&(&lower_left_corner + &(&horizontal * u)) + &(&vertical * v)),
+                &camera.origin,
+                &(&(&camera.lower_left_corner + &(&camera.horizontal * u)) + &(&camera.vertical * v)),
             );
 
             let col = match hitables.hit(&ray, 0f32, f32::MAX) {
