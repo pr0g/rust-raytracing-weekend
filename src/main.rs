@@ -3,10 +3,52 @@ use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 
 use std::error::Error;
+use std::f32;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::time::Duration;
+
+trait Hitable {
+    fn hit(self: &Self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit>;
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Hit {
+    t: f32,
+    p: Vec3,
+    normal: Vec3,
+}
+
+impl Hitable for Sphere {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit> {
+        let oc = &ray.origin - &self.center;
+        let a = length_sq(&ray.direction);
+        let b = dot(&oc, &ray.direction);
+        let c = length_sq(&oc) - self.radius * self.radius;
+        let discriminant = b * b - a * c;
+        if discriminant > 0f32 {
+            let temp = (-b - discriminant.sqrt()) / a;
+            if temp < t_max && temp > t_min {
+                return Some(Hit {
+                    t: temp,
+                    p: ray.point_at_t(temp),
+                    normal: &(&ray.point_at_t(temp) - &self.center) / self.radius,
+                });
+            }
+            let temp = (-b + discriminant.sqrt()) / a;
+            if temp < t_max && temp > t_min {
+                return Some(Hit {
+                    t: temp,
+                    p: ray.point_at_t(temp),
+                    normal: &(&ray.point_at_t(temp) - &self.center) / self.radius,
+                });
+            }
+        }
+
+        None
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 struct Sphere {
@@ -148,19 +190,6 @@ fn cross(lhs: &Vec3, rhs: &Vec3) -> Vec3 {
     }
 }
 
-fn hit_sphere(sphere: &Sphere, ray: &Ray) -> Option<f32> {
-    let oc = &ray.origin - &sphere.center;
-    let a = length_sq(&ray.direction);
-    let b = 2f32 * dot(&oc, &ray.direction);
-    let c = length_sq(&oc) - sphere.radius * sphere.radius;
-    let discriminant = b * b - 4f32 * a * c;
-    if discriminant < 0f32 {
-        None
-    } else {
-        Some((-b - discriminant.sqrt()) / (2f32 * a))
-    }
-}
-
 fn create_ppm_file() -> std::io::Result<()> {
     let file = OpenOptions::new()
         .write(true)
@@ -190,11 +219,13 @@ fn create_ppm_file() -> std::io::Result<()> {
                 &(&(&lower_left_corner + &(&horizontal * u)) + &(&vertical * v)),
             );
 
-            let col = match hit_sphere(&Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32), &ray) {
-                Some(t) => {
-                    let normal = normalize(&(&ray.point_at_t(t) - &Vec3::new(0f32, 0f32, -1f32)));
+            let sphere = Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32);
+            let col = match sphere.hit(&ray, 0f32, f32::MAX) {
+                Some(hit) => {
+                    let normal =
+                        normalize(&(&ray.point_at_t(hit.t) - &Vec3::new(0f32, 0f32, -1f32)));
                     &Vec3::new(normal.x + 1f32, normal.y + 1f32, normal.z + 1f32) * 0.5f32
-                },
+                }
                 None => {
                     let unit_dir = normalize(&ray.direction);
                     let t = 0.5f32 * unit_dir.y + 1f32;
