@@ -1,0 +1,8 @@
+[package]
+name = "sdl-rust"
+version = "0.1.0"
+authors = ["Tom Hulton-Harrop <tom.hultonharrop@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+sdl2 = "0.32.2"
