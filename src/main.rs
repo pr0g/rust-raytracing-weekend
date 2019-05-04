@@ -2,6 +2,8 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 
+use rand::Rng;
+
 use std::error::Error;
 use std::f32;
 use std::fs::OpenOptions;
@@ -271,33 +273,41 @@ fn create_ppm_file() -> std::io::Result<()> {
         100f32,
     )));
 
+    let mut rng = rand::thread_rng();
     let camera = Camera::new();
 
     for y in (0..height).rev() {
         for x in 0..width {
-            let u = x as f32 / (width - 1) as f32;
-            let v = y as f32 / (height - 1) as f32;
+            let mut color = Vec3::zero();
+            let samples = 100;
+            for _ in 0..samples {
+                let u = ((x as f32) + rng.gen_range(0f32, 1f32)) / (width - 1) as f32;
+                let v = ((y as f32) + rng.gen_range(0f32, 1f32)) / (height - 1) as f32;
+                let ray = camera.ray(u, v);
+                let col = match hitables.hit(&ray, 0f32, f32::MAX) {
+                    Some(hit) => {
+                        &Vec3::new(
+                            hit.normal.x + 1f32,
+                            hit.normal.y + 1f32,
+                            hit.normal.z + 1f32,
+                        ) * 0.5f32
+                    }
+                    None => {
+                        let unit_dir = normalize(&ray.direction);
+                        let t = 0.5f32 * unit_dir.y + 1f32;
+                        &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
+                    }
+                };
 
-            let ray = camera.ray(u, v);
-            let col = match hitables.hit(&ray, 0f32, f32::MAX) {
-                Some(hit) => {
-                    &Vec3::new(
-                        hit.normal.x + 1f32,
-                        hit.normal.y + 1f32,
-                        hit.normal.z + 1f32,
-                    ) * 0.5f32
-                }
-                None => {
-                    let unit_dir = normalize(&ray.direction);
-                    let t = 0.5f32 * unit_dir.y + 1f32;
-                    &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
-                }
-            };
+                color = &color + &col;
+            }
+
+            color = &color / samples as f32;
 
             let (ir, ig, ib) = (
-                (255_f32 * col.x) as i32,
-                (255_f32 * col.y) as i32,
-                (255_f32 * col.z) as i32,
+                (255_f32 * color.x) as i32,
+                (255_f32 * color.y) as i32,
+                (255_f32 * color.z) as i32,
             );
 
             writer.write_fmt(format_args!("{} {} {}\n", ir, ig, ib))?;
