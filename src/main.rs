@@ -249,6 +249,37 @@ fn cross(lhs: &Vec3, rhs: &Vec3) -> Vec3 {
     }
 }
 
+fn random_in_unit_sphere() -> Vec3 {
+    let mut rng = rand::thread_rng();
+    let mut p : Vec3;
+    loop {
+        p = &(&Vec3::new(
+            rng.gen_range(0f32, 1f32),
+            rng.gen_range(0f32, 1f32),
+            rng.gen_range(0f32, 1f32),
+        ) * 2f32)
+            - &Vec3::one();
+        if length_sq(&p) < 1f32 {
+            break;
+        }
+    }
+    p
+}
+
+fn next_color(ray: &Ray, hitable: &Hitable) -> Vec3 {
+    match hitable.hit(&ray, 0.001f32, f32::MAX) {
+        Some(hit) => {
+            let target = &(&hit.p + &hit.normal) + &random_in_unit_sphere();
+            &next_color(&Ray::new(&hit.p, &(&target - &hit.p)), hitable) * 0.5f32
+        }
+        None => {
+            let unit_dir = normalize(&ray.direction);
+            let t = 0.5f32 * unit_dir.y + 1f32;
+            &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
+        }
+    }
+}
+
 fn create_ppm_file() -> std::io::Result<()> {
     let file = OpenOptions::new()
         .write(true)
@@ -283,25 +314,11 @@ fn create_ppm_file() -> std::io::Result<()> {
             for _ in 0..samples {
                 let u = ((x as f32) + rng.gen_range(0f32, 1f32)) / (width - 1) as f32;
                 let v = ((y as f32) + rng.gen_range(0f32, 1f32)) / (height - 1) as f32;
-                let ray = camera.ray(u, v);
-                color = &color
-                    + &(match hitables.hit(&ray, 0f32, f32::MAX) {
-                        Some(hit) => {
-                            &Vec3::new(
-                                hit.normal.x + 1f32,
-                                hit.normal.y + 1f32,
-                                hit.normal.z + 1f32,
-                            ) * 0.5f32
-                        }
-                        None => {
-                            let unit_dir = normalize(&ray.direction);
-                            let t = 0.5f32 * unit_dir.y + 1f32;
-                            &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
-                        }
-                    });
+                color = &color + &next_color(&camera.ray(u, v), &hitables);
             }
 
             color = &color / samples as f32;
+            color = Vec3::new(color.x.sqrt(), color.y.sqrt(), color.z.sqrt());
 
             let (ir, ig, ib) = (
                 (255_f32 * color.x) as i32,
