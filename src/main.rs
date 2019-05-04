@@ -25,6 +25,13 @@ impl Camera {
             vertical: Vec3::new(0f32, 2f32, 0f32),
         }
     }
+
+    fn ray(&self, u: f32, v: f32) -> Ray {
+        Ray::new(
+            &self.origin,
+            &(&(&self.lower_left_corner + &(&self.horizontal * u)) + &(&self.vertical * v)),
+        )
+    }
 }
 
 struct Hitables {
@@ -270,11 +277,8 @@ fn create_ppm_file() -> std::io::Result<()> {
         for x in 0..width {
             let u = x as f32 / (width - 1) as f32;
             let v = y as f32 / (height - 1) as f32;
-            let ray = Ray::new(
-                &camera.origin,
-                &(&(&camera.lower_left_corner + &(&camera.horizontal * u)) + &(&camera.vertical * v)),
-            );
 
+            let ray = camera.ray(u, v);
             let col = match hitables.hit(&ray, 0f32, f32::MAX) {
                 Some(hit) => {
                     &Vec3::new(
