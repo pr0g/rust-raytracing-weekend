@@ -284,22 +284,21 @@ fn create_ppm_file() -> std::io::Result<()> {
                 let u = ((x as f32) + rng.gen_range(0f32, 1f32)) / (width - 1) as f32;
                 let v = ((y as f32) + rng.gen_range(0f32, 1f32)) / (height - 1) as f32;
                 let ray = camera.ray(u, v);
-                let col = match hitables.hit(&ray, 0f32, f32::MAX) {
-                    Some(hit) => {
-                        &Vec3::new(
-                            hit.normal.x + 1f32,
-                            hit.normal.y + 1f32,
-                            hit.normal.z + 1f32,
-                        ) * 0.5f32
-                    }
-                    None => {
-                        let unit_dir = normalize(&ray.direction);
-                        let t = 0.5f32 * unit_dir.y + 1f32;
-                        &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
-                    }
-                };
-
-                color = &color + &col;
+                color = &color
+                    + &(match hitables.hit(&ray, 0f32, f32::MAX) {
+                        Some(hit) => {
+                            &Vec3::new(
+                                hit.normal.x + 1f32,
+                                hit.normal.y + 1f32,
+                                hit.normal.z + 1f32,
+                            ) * 0.5f32
+                        }
+                        None => {
+                            let unit_dir = normalize(&ray.direction);
+                            let t = 0.5f32 * unit_dir.y + 1f32;
+                            &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
+                        }
+                    });
             }
 
             color = &color / samples as f32;
