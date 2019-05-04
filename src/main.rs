@@ -11,6 +11,48 @@ use std::io::{BufWriter, Write};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::time::Duration;
 
+trait Material {
+    fn scatter(&self, ray: &Ray, hit: &Hit) -> Option<(Vec3, Ray)>;
+}
+
+struct Lambertian {
+    albedo: Vec3,
+}
+
+impl Lambertian {
+    fn new(albedo: &Vec3) -> Self {
+        Lambertian { albedo: *albedo }
+    }
+}
+
+struct Metal {
+    albedo: Vec3
+}
+
+impl Metal {
+    fn new(albedo: &Vec3) -> Self {
+        Metal { albedo : *albedo }
+    }
+}
+
+impl Material for Metal {
+    fn scatter(&self, ray: &Ray, hit: &Hit) -> Option<(Vec3, Ray)> {
+        let reflected = reflect(&normalize(&ray.direction), &hit.normal);
+        let scattered = Ray::new(&hit.p, &reflected);
+        if dot(&scattered.direction, &hit.normal) > 0f32 {
+            return Some((self.albedo, scattered))
+        }
+        None
+    }
+}
+
+impl Material for Lambertian {
+    fn scatter(&self, _: &Ray, hit: &Hit) -> Option<(Vec3, Ray)> {
+        let target = &(&hit.p + &hit.normal) + &random_in_unit_sphere();
+        Some((self.albedo, Ray::new(&hit.p, &(&target - &hit.p))))
+    }
+}
+
 struct Camera {
     origin: Vec3,
     lower_left_corner: Vec3,
@@ -73,11 +115,12 @@ trait Hitable {
     fn hit(self: &Self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit>;
 }
 
-#[derive(Clone, Copy, Debug)]
-struct Hit {
+#[derive(Clone, Copy)]
+struct Hit<'a> {
     t: f32,
     p: Vec3,
     normal: Vec3,
+    material: &'a dyn Material,
 }
 
 impl Hitable for Sphere {
@@ -94,6 +137,7 @@ impl Hitable for Sphere {
                     t: temp,
                     p: ray.point_at_t(temp),
                     normal: &(&ray.point_at_t(temp) - &self.center) / self.radius,
+                    material: self.material.as_ref(),
                 });
             }
             let temp = (-b + discriminant.sqrt()) / a;
@@ -102,6 +146,7 @@ impl Hitable for Sphere {
                     t: temp,
                     p: ray.point_at_t(temp),
                     normal: &(&ray.point_at_t(temp) - &self.center) / self.radius,
+                    material: self.material.as_ref(),
                 });
             }
         }
@@ -109,17 +154,18 @@ impl Hitable for Sphere {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
 struct Sphere {
     center: Vec3,
     radius: f32,
+    material: Box<dyn Material>,
 }
 
 impl Sphere {
-    fn new(center: &Vec3, radius: f32) -> Self {
+    fn new(center: &Vec3, radius: f32, material: Box<dyn Material>) -> Self {
         Sphere {
             center: *center,
             radius,
+            material,
         }
     }
 }
@@ -214,6 +260,17 @@ impl Mul<f32> for &Vec3 {
     }
 }
 
+impl Mul<&Vec3> for &Vec3 {
+    type Output = Vec3;
+    fn mul(self, rhs: &Vec3) -> Self::Output {
+        Vec3 {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+            z: self.z * rhs.z,
+        }
+    }
+}
+
 impl Div<f32> for &Vec3 {
     type Output = Vec3;
     fn div(self, rhs: f32) -> Self::Output {
@@ -251,7 +308,7 @@ fn cross(lhs: &Vec3, rhs: &Vec3) -> Vec3 {
 
 fn random_in_unit_sphere() -> Vec3 {
     let mut rng = rand::thread_rng();
-    let mut p : Vec3;
+    let mut p: Vec3;
     loop {
         p = &(&Vec3::new(
             rng.gen_range(0f32, 1f32),
@@ -266,11 +323,18 @@ fn random_in_unit_sphere() -> Vec3 {
     p
 }
 
-fn next_color(ray: &Ray, hitable: &Hitable) -> Vec3 {
+fn next_color(ray: &Ray, hitable: &Hitable, depth: u32) -> Vec3 {
     match hitable.hit(&ray, 0.001f32, f32::MAX) {
         Some(hit) => {
-            let target = &(&hit.p + &hit.normal) + &random_in_unit_sphere();
-            &next_color(&Ray::new(&hit.p, &(&target - &hit.p)), hitable) * 0.5f32
+            if depth < 50 {
+                if let Some(next) = hit.material.scatter(&ray, &hit) {
+                    return &next_color(&next.1, hitable, depth + 1) * &next.0;
+                } else {
+                    return Vec3::zero();
+                }
+            } else {
+                return Vec3::zero();
+            }
         }
         None => {
             let unit_dir = normalize(&ray.direction);
@@ -278,6 +342,10 @@ fn next_color(ray: &Ray, hitable: &Hitable) -> Vec3 {
             &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
         }
     }
+}
+
+fn reflect(vec: &Vec3, normal: &Vec3) -> Vec3 {
+    vec - &(normal * (dot(vec, normal) * 2f32))
 }
 
 fn create_ppm_file() -> std::io::Result<()> {
@@ -296,12 +364,25 @@ fn create_ppm_file() -> std::io::Result<()> {
     writer.write_fmt(format_args!("P3\n{} {}\n255\n", width, height))?;
 
     let mut hitables = Hitables::new();
-    hitables
-        .hitables
-        .push(Box::new(Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32)));
+    hitables.hitables.push(Box::new(Sphere::new(
+        &Vec3::new(0f32, 0f32, -1f32),
+        0.5f32,
+        Box::new(Lambertian::new(&Vec3::new(0.8f32, 0.3f32, 0.3f32))),
+    )));
+    hitables.hitables.push(Box::new(Sphere::new(
+        &Vec3::new(1f32, 0f32, -1f32),
+        0.5f32,
+        Box::new(Metal::new(&Vec3::new(0.8f32, 0.6f32, 0.2f32))),
+    )));
+    hitables.hitables.push(Box::new(Sphere::new(
+        &Vec3::new(-1f32, 0f32, -1f32),
+        0.5f32,
+        Box::new(Metal::new(&Vec3::new(0.8f32, 0.8f32, 0.8f32))),
+    )));
     hitables.hitables.push(Box::new(Sphere::new(
         &Vec3::new(0f32, -100.5f32, -1f32),
         100f32,
+        Box::new(Lambertian::new(&Vec3::new(0.8f32, 0.8f32, 0f32))),
     )));
 
     let mut rng = rand::thread_rng();
@@ -314,7 +395,7 @@ fn create_ppm_file() -> std::io::Result<()> {
             for _ in 0..samples {
                 let u = ((x as f32) + rng.gen_range(0f32, 1f32)) / (width - 1) as f32;
                 let v = ((y as f32) + rng.gen_range(0f32, 1f32)) / (height - 1) as f32;
-                color = &color + &next_color(&camera.ray(u, v), &hitables);
+                color = &color + &next_color(&camera.ray(u, v), &hitables, 0);
             }
 
             color = &color / samples as f32;
