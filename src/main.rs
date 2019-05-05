@@ -26,19 +26,26 @@ impl Lambertian {
 }
 
 struct Metal {
-    albedo: Vec3
+    albedo: Vec3,
+    fuzz: f32
+}
+
+fn clamp(val: f32, begin: f32, end: f32) -> f32 {
+    if val < begin { return begin; }
+    if val > end { return end; }
+    val
 }
 
 impl Metal {
-    fn new(albedo: &Vec3) -> Self {
-        Metal { albedo : *albedo }
+    fn new(albedo: &Vec3, fuzz: f32) -> Self {
+        Metal { albedo : *albedo, fuzz: clamp(fuzz, 0f32, 1f32) }
     }
 }
 
 impl Material for Metal {
     fn scatter(&self, ray: &Ray, hit: &Hit) -> Option<(Vec3, Ray)> {
         let reflected = reflect(&normalize(&ray.direction), &hit.normal);
-        let scattered = Ray::new(&hit.p, &reflected);
+        let scattered = Ray::new(&hit.p, &(&reflected + &(&random_in_unit_sphere() * self.fuzz)));
         if dot(&scattered.direction, &hit.normal) > 0f32 {
             return Some((self.albedo, scattered))
         }
@@ -372,12 +379,12 @@ fn create_ppm_file() -> std::io::Result<()> {
     hitables.hitables.push(Box::new(Sphere::new(
         &Vec3::new(1f32, 0f32, -1f32),
         0.5f32,
-        Box::new(Metal::new(&Vec3::new(0.8f32, 0.6f32, 0.2f32))),
+        Box::new(Metal::new(&Vec3::new(0.8f32, 0.6f32, 0.2f32), 0.0f32)),
     )));
     hitables.hitables.push(Box::new(Sphere::new(
         &Vec3::new(-1f32, 0f32, -1f32),
         0.5f32,
-        Box::new(Metal::new(&Vec3::new(0.8f32, 0.8f32, 0.8f32))),
+        Box::new(Metal::new(&Vec3::new(0.8f32, 0.8f32, 0.8f32), 0.5f32)),
     )));
     hitables.hitables.push(Box::new(Sphere::new(
         &Vec3::new(0f32, -100.5f32, -1f32),
