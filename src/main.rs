@@ -30,34 +30,33 @@ impl Material for Dielectric {
         let outward_normal : Vec3;
         let reflected = reflect(&ray.direction, &hit.normal);
         let ni_over_nt : f32;
-        // let reflect_prob : f32;
-        // let cosine : f32;
+        let reflect_prob : f32;
+        let mut cosine : f32;
         if dot(&ray.direction, &hit.normal) > 0f32 {
             outward_normal = -&hit.normal;
             ni_over_nt = self.reflective_index;
-            // cosine = self.reflective_index * dot(&ray.direction, &hit.normal) / length(&ray.direction);
+            cosine = dot(&ray.direction, &hit.normal) / length(&ray.direction);
+            cosine = (1f32 - self.reflective_index * self.reflective_index * (1f32 - cosine * cosine)).sqrt();
         } else {
             outward_normal = hit.normal;
             ni_over_nt = 1f32 / self.reflective_index;
-            // cosine = -dot(&ray.direction, &hit.normal) / length(&ray.direction);
+            cosine = -dot(&ray.direction, &hit.normal) / length(&ray.direction);
         }
 
         let refracted = refract(&ray.direction, &outward_normal, ni_over_nt);
 
         if let Some(refracted) = refracted {
-            Some((Vec3::new(1f32, 1f32, 1f32), Ray::new(&hit.p, &refracted)))
-            // reflect_prob = schlick(cosine, self.reflective_index);
+            reflect_prob = schlick(cosine, self.reflective_index);
         } else {
-            // reflect_prob = 1f32;
-            Some((Vec3::new(1f32, 1f32, 1f32), Ray::new(&hit.p, &reflected)))
+            reflect_prob = 1f32;
         }
 
-        // let mut rng = rand::thread_rng();
-        // if rng.gen_range(0f32, 1f32) < reflect_prob {
-        //     Some((Vec3::new(1f32, 1f32, 1f32), Ray::new(&hit.p, &reflected)))
-        // } else {
-        //     Some((Vec3::new(1f32, 1f32, 1f32), Ray::new(&hit.p, &refracted.unwrap())))
-        // }
+        let mut rng = rand::thread_rng();
+        if rng.gen_range(0f32, 1f32) < reflect_prob {
+            Some((Vec3::new(1f32, 1f32, 1f32), Ray::new(&hit.p, &reflected)))
+        } else {
+            Some((Vec3::new(1f32, 1f32, 1f32), Ray::new(&hit.p, &refracted.unwrap())))
+        }
     }
 }
 
@@ -151,7 +150,7 @@ impl Hitable for Hitables {
                 Some(hit) => match closest_hit {
                     Some(closest) => {
                         if hit.t < closest.t {
-                            closest_hit = Some(closest);
+                            closest_hit = Some(hit);
                         }
                     }
                     None => closest_hit = Some(hit),
@@ -437,7 +436,12 @@ fn create_ppm_file() -> std::io::Result<()> {
     hitables.hitables.push(Box::new(Sphere::new(
         &Vec3::new(0f32, 0f32, -1f32),
         0.5f32,
-        Box::new(Lambertian::new(&Vec3::new(0.8f32, 0.3f32, 0.3f32))),
+        Box::new(Lambertian::new(&Vec3::new(0.1f32, 0.2f32, 0.5f32))),
+    )));
+    hitables.hitables.push(Box::new(Sphere::new(
+        &Vec3::new(0f32, -100.5f32, -1f32),
+        100f32,
+        Box::new(Lambertian::new(&Vec3::new(0.8f32, 0.8f32, 0f32))),
     )));
     hitables.hitables.push(Box::new(Sphere::new(
         &Vec3::new(1f32, 0f32, -1f32),
@@ -450,9 +454,9 @@ fn create_ppm_file() -> std::io::Result<()> {
         Box::new(Dielectric::new(1.5f32)),
     )));
     hitables.hitables.push(Box::new(Sphere::new(
-        &Vec3::new(0f32, -100.5f32, -1f32),
-        100f32,
-        Box::new(Lambertian::new(&Vec3::new(0.8f32, 0.8f32, 0f32))),
+        &Vec3::new(-1f32, 0f32, -1f32),
+        -0.45f32,
+        Box::new(Dielectric::new(1.5f32)),
     )));
 
     let mut rng = rand::thread_rng();
