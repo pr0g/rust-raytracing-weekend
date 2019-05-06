@@ -16,7 +16,7 @@ trait Material {
 }
 
 struct Dielectric {
-    reflective_index: f32
+    reflective_index: f32,
 }
 
 impl Dielectric {
@@ -27,16 +27,18 @@ impl Dielectric {
 
 impl Material for Dielectric {
     fn scatter(&self, ray: &Ray, hit: &Hit) -> Option<(Vec3, Ray)> {
-        let outward_normal : Vec3;
+        let outward_normal: Vec3;
         let reflected = reflect(&ray.direction, &hit.normal);
-        let ni_over_nt : f32;
-        let reflect_prob : f32;
-        let mut cosine : f32;
+        let ni_over_nt: f32;
+        let reflect_prob: f32;
+        let mut cosine: f32;
         if dot(&ray.direction, &hit.normal) > 0f32 {
             outward_normal = -&hit.normal;
             ni_over_nt = self.reflective_index;
             cosine = dot(&ray.direction, &hit.normal) / length(&ray.direction);
-            cosine = (1f32 - self.reflective_index * self.reflective_index * (1f32 - cosine * cosine)).sqrt();
+            cosine = (1f32
+                - self.reflective_index * self.reflective_index * (1f32 - cosine * cosine))
+                .sqrt();
         } else {
             outward_normal = hit.normal;
             ni_over_nt = 1f32 / self.reflective_index;
@@ -45,7 +47,7 @@ impl Material for Dielectric {
 
         let refracted = refract(&ray.direction, &outward_normal, ni_over_nt);
 
-        if let Some(refracted) = refracted {
+        if refracted.is_some() {
             reflect_prob = schlick(cosine, self.reflective_index);
         } else {
             reflect_prob = 1f32;
@@ -55,7 +57,10 @@ impl Material for Dielectric {
         if rng.gen_range(0f32, 1f32) < reflect_prob {
             Some((Vec3::new(1f32, 1f32, 1f32), Ray::new(&hit.p, &reflected)))
         } else {
-            Some((Vec3::new(1f32, 1f32, 1f32), Ray::new(&hit.p, &refracted.unwrap())))
+            Some((
+                Vec3::new(1f32, 1f32, 1f32),
+                Ray::new(&hit.p, &refracted.unwrap()),
+            ))
         }
     }
 }
@@ -72,27 +77,37 @@ impl Lambertian {
 
 struct Metal {
     albedo: Vec3,
-    fuzz: f32
+    fuzz: f32,
 }
 
 fn clamp(val: f32, begin: f32, end: f32) -> f32 {
-    if val < begin { return begin; }
-    if val > end { return end; }
+    if val < begin {
+        return begin;
+    }
+    if val > end {
+        return end;
+    }
     val
 }
 
 impl Metal {
     fn new(albedo: &Vec3, fuzz: f32) -> Self {
-        Metal { albedo : *albedo, fuzz: clamp(fuzz, 0f32, 1f32) }
+        Metal {
+            albedo: *albedo,
+            fuzz: clamp(fuzz, 0f32, 1f32),
+        }
     }
 }
 
 impl Material for Metal {
     fn scatter(&self, ray: &Ray, hit: &Hit) -> Option<(Vec3, Ray)> {
         let reflected = reflect(&normalize(&ray.direction), &hit.normal);
-        let scattered = Ray::new(&hit.p, &(&reflected + &(&random_in_unit_sphere() * self.fuzz)));
+        let scattered = Ray::new(
+            &hit.p,
+            &(&reflected + &(&random_in_unit_sphere() * self.fuzz)),
+        );
         if dot(&scattered.direction, &hit.normal) > 0f32 {
-            return Some((self.albedo, scattered))
+            return Some((self.albedo, scattered));
         }
         None
     }
@@ -385,7 +400,7 @@ fn next_color(ray: &Ray, hitable: &Hitable, depth: u32) -> Vec3 {
                     return Vec3::zero();
                 }
             } else {
-                return Vec3::zero();
+                Vec3::zero()
             }
         }
         None => {
@@ -405,7 +420,7 @@ fn refract(vec: &Vec3, normal: &Vec3, ni_over_nt: f32) -> Option<Vec3> {
     let dt = dot(&uv, &normal);
     let discriminant = 1f32 - ni_over_nt * ni_over_nt * (1f32 - dt * dt);
     if discriminant > 0f32 {
-        Some(&(&(&uv - &(normal * dt))*ni_over_nt) - &(normal * discriminant.sqrt()))
+        Some(&(&(&uv - &(normal * dt)) * ni_over_nt) - &(normal * discriminant.sqrt()))
     } else {
         None
     }
