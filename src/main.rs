@@ -118,14 +118,17 @@ impl Material for Lambertian {
 }
 
 struct Camera {
+    lens_radius: f32,
     origin: Vec3,
     lower_left_corner: Vec3,
     horizontal: Vec3,
     vertical: Vec3,
+    u: Vec3,
+    v: Vec3,
 }
 
 impl Camera {
-    fn new(look_from: &Vec3, look_at: &Vec3, up: &Vec3, vertical_fov: f32, aspect: f32) -> Self {
+    fn new(look_from: &Vec3, look_at: &Vec3, up: &Vec3, vertical_fov: f32, aspect: f32, aperture: f32, focus_distance: f32) -> Self {
         let theta = vertical_fov * std::f32::consts::PI / 180f32;
         let half_height = (theta * 0.5f32).tan();
         let half_width = aspect * half_height;
@@ -134,18 +137,21 @@ impl Camera {
         let v = cross(&w, &u);
         Camera {
             origin: *look_from,
-            lower_left_corner: *look_from - (u * half_width) - (v * half_height) - w,
-            //lower_left_corner: &(look_from - &(&u * half_width)) - &(&(&v * half_height) - &w),
-            horizontal: u * (half_width * 2f32),
-            vertical: v * (half_height * 2f32),
+            lower_left_corner: *look_from - (u * half_width * focus_distance) - (v * half_height * focus_distance) - w * focus_distance,
+            horizontal: u * (half_width * 2f32 * focus_distance),
+            vertical: v * (half_height * 2f32 * focus_distance),
+            lens_radius: aperture * 0.5f32,
+            u,
+            v,
         }
     }
 
-    fn ray(&self, u: f32, v: f32) -> Ray {
+    fn ray(&self, s: f32, t: f32) -> Ray {
+        let rd = random_in_unit_disk() * self.lens_radius;
+        let offset = self.u * rd.x + self.v * rd.y;
         Ray::new(
-            &self.origin,
-            //&(&(&self.lower_left_corner + &(&self.horizontal * u)) + &(&(&self.vertical * v) - &self.origin)),
-            &(self.lower_left_corner + self.horizontal * u + self.vertical * v - self.origin),
+            &(self.origin + offset),
+            &(self.lower_left_corner + self.horizontal * s + self.vertical * t - self.origin - offset),
         )
     }
 }
@@ -395,6 +401,23 @@ fn random_in_unit_sphere() -> Vec3 {
     p
 }
 
+fn random_in_unit_disk() -> Vec3 {
+    let mut rng = rand::thread_rng();
+    let mut p : Vec3;
+    loop {
+        p = (Vec3::new(
+            rng.gen_range(0f32, 1f32),
+            rng.gen_range(0f32, 1f32),
+            0f32,
+        ) * 2f32) 
+            - Vec3::new(1f32, 1f32, 0f32);
+        if length_sq(&p) < 1f32 {
+            break;
+        }
+    }
+    p
+}
+
 fn next_color(ray: &Ray, hitable: &Hitable, depth: u32) -> Vec3 {
     match hitable.hit(&ray, 0.001f32, f32::MAX) {
         Some(hit) => {
@@ -490,13 +513,20 @@ fn create_ppm_file() -> std::io::Result<()> {
         Box::new(Dielectric::new(1.5f32)),
     )));
 
+    let look_from = Vec3::new(3f32, 3f32, 2f32);
+    let look_at = Vec3::new(0f32, 0f32, -1f32);
+    let focus_distance = length(&(look_from - look_at));
+    let aperture = 2f32;
+
     let mut rng = rand::thread_rng();
     let camera = Camera::new(
-        &Vec3::new(-2f32, 2f32, 1f32),
-        &Vec3::new(0f32, 0f32, -1f32),
+        &look_from,
+        &look_at,
         &Vec3::new(0f32, 1f32, 0f32),
-        90f32,
+        20f32,
         width as f32 / height as f32,
+        aperture,
+        focus_distance
     );
 
     for y in (0..height).rev() {
