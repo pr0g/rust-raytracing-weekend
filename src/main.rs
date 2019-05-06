@@ -128,7 +128,15 @@ struct Camera {
 }
 
 impl Camera {
-    fn new(look_from: &Vec3, look_at: &Vec3, up: &Vec3, vertical_fov: f32, aspect: f32, aperture: f32, focus_distance: f32) -> Self {
+    fn new(
+        look_from: &Vec3,
+        look_at: &Vec3,
+        up: &Vec3,
+        vertical_fov: f32,
+        aspect: f32,
+        aperture: f32,
+        focus_distance: f32,
+    ) -> Self {
         let theta = vertical_fov * std::f32::consts::PI / 180f32;
         let half_height = (theta * 0.5f32).tan();
         let half_width = aspect * half_height;
@@ -137,7 +145,10 @@ impl Camera {
         let v = cross(&w, &u);
         Camera {
             origin: *look_from,
-            lower_left_corner: *look_from - (u * half_width * focus_distance) - (v * half_height * focus_distance) - w * focus_distance,
+            lower_left_corner: *look_from
+                - (u * half_width * focus_distance)
+                - (v * half_height * focus_distance)
+                - w * focus_distance,
             horizontal: u * (half_width * 2f32 * focus_distance),
             vertical: v * (half_height * 2f32 * focus_distance),
             lens_radius: aperture * 0.5f32,
@@ -151,7 +162,9 @@ impl Camera {
         let offset = self.u * rd.x + self.v * rd.y;
         Ray::new(
             &(self.origin + offset),
-            &(self.lower_left_corner + self.horizontal * s + self.vertical * t - self.origin - offset),
+            &(self.lower_left_corner + self.horizontal * s + self.vertical * t
+                - self.origin
+                - offset),
         )
     }
 }
@@ -403,13 +416,9 @@ fn random_in_unit_sphere() -> Vec3 {
 
 fn random_in_unit_disk() -> Vec3 {
     let mut rng = rand::thread_rng();
-    let mut p : Vec3;
+    let mut p: Vec3;
     loop {
-        p = (Vec3::new(
-            rng.gen_range(0f32, 1f32),
-            rng.gen_range(0f32, 1f32),
-            0f32,
-        ) * 2f32) 
+        p = (Vec3::new(rng.gen_range(0f32, 1f32), rng.gen_range(0f32, 1f32), 0f32) * 2f32)
             - Vec3::new(1f32, 1f32, 0f32);
         if length_sq(&p) < 1f32 {
             break;
@@ -460,6 +469,79 @@ fn schlick(cosine: f32, reflective_index: f32) -> f32 {
     r0 + (1f32 - r0) * (1f32 - cosine).powf(5f32)
 }
 
+fn random_scene() -> Hitables {
+    let mut hitables = Hitables::new();
+
+    hitables.hitables.push(Box::new(Sphere::new(
+        &Vec3::new(0f32, -1000f32, 0f32),
+        1000f32,
+        Box::new(Lambertian::new(&Vec3::new(0.5f32, 0.5f32, 0.5f32))),
+    )));
+
+    let mut rng = rand::thread_rng();
+
+    for a in -11..11 {
+        for b in -11..11 {
+            let choose_mat = rng.gen_range(0f32, 1f32);
+            let center = Vec3::new(
+                a as f32 + 0.9f32 * rng.gen_range(0f32, 1f32),
+                0.2f32,
+                b as f32 + 0.9 * rng.gen_range(0f32, 1f32),
+            );
+            if length(&(center - Vec3::new(4f32, 0.2f32, 0f32))) > 0.9f32 {
+                if choose_mat < 0.8f32 {
+                    hitables.hitables.push(Box::new(Sphere::new(
+                        &center,
+                        0.2f32,
+                        Box::new(Lambertian::new(&Vec3::new(
+                            rng.gen_range(0f32, 1f32) * rng.gen_range(0f32, 1f32),
+                            rng.gen_range(0f32, 1f32) * rng.gen_range(0f32, 1f32),
+                            rng.gen_range(0f32, 1f32) * rng.gen_range(0f32, 1f32),
+                        ))),
+                    )));
+                } else if choose_mat < 0.95f32 {
+                    hitables.hitables.push(Box::new(Sphere::new(
+                        &center,
+                        0.2f32,
+                        Box::new(Metal::new(
+                            &Vec3::new(
+                                0.5f32 * (1f32 + rng.gen_range(0f32, 1f32)),
+                                0.5f32 * (1f32 + rng.gen_range(0f32, 1f32)),
+                                0.5f32 * (1f32 + rng.gen_range(0f32, 1f32)),
+                            ),
+                            0.5f32 * rng.gen_range(0f32, 1f32),
+                        )),
+                    )));
+                } else {
+                    hitables.hitables.push(Box::new(Sphere::new(
+                        &center,
+                        0.2f32,
+                        Box::new(Dielectric::new(1.5f32)),
+                    )));
+                }
+            }
+        }
+    }
+
+    hitables.hitables.push(Box::new(Sphere::new(
+        &Vec3::new(0f32, 1f32, 0f32),
+        1f32,
+        Box::new(Dielectric::new(1.5f32)),
+    )));
+    hitables.hitables.push(Box::new(Sphere::new(
+        &Vec3::new(-4f32, 1f32, 0f32),
+        1f32,
+        Box::new(Lambertian::new(&Vec3::new(0.4f32, 0.2f32, 0.1f32))),
+    )));
+    hitables.hitables.push(Box::new(Sphere::new(
+        &Vec3::new(4f32, 1f32, 0f32),
+        1f32,
+        Box::new(Metal::new(&Vec3::new(0.7f32, 0.6f32, 0.5f32), 0.0f32)),
+    )));
+
+    hitables
+}
+
 fn create_ppm_file() -> std::io::Result<()> {
     let file = OpenOptions::new()
         .write(true)
@@ -471,11 +553,13 @@ fn create_ppm_file() -> std::io::Result<()> {
         Err(e) => return Err(e),
     };
 
-    let width = 200;
-    let height = 100;
+    let width = 1200;
+    let height = 800;
     writer.write_fmt(format_args!("P3\n{} {}\n255\n", width, height))?;
 
-    let mut hitables = Hitables::new();
+    let hitables = random_scene();
+
+    //Hitables::new();
     //    let r = (std::f32::consts::PI / 4f32).cos();
     //    hitables.hitables.push(Box::new(Sphere::new(
     //        &Vec3::new(-r, 0f32, -1f32),
@@ -487,36 +571,36 @@ fn create_ppm_file() -> std::io::Result<()> {
     //        r,
     //        Box::new(Lambertian::new(&Vec3::new(1f32, 0f32, 0f32))),
     //    )));
-    hitables.hitables.push(Box::new(Sphere::new(
-        &Vec3::new(0f32, 0f32, -1f32),
-        0.5f32,
-        Box::new(Lambertian::new(&Vec3::new(0.1f32, 0.2f32, 0.5f32))),
-    )));
-    hitables.hitables.push(Box::new(Sphere::new(
-        &Vec3::new(0f32, -100.5f32, -1f32),
-        100f32,
-        Box::new(Lambertian::new(&Vec3::new(0.8f32, 0.8f32, 0f32))),
-    )));
-    hitables.hitables.push(Box::new(Sphere::new(
-        &Vec3::new(1f32, 0f32, -1f32),
-        0.5f32,
-        Box::new(Metal::new(&Vec3::new(0.8f32, 0.6f32, 0.2f32), 0.0f32)),
-    )));
-    hitables.hitables.push(Box::new(Sphere::new(
-        &Vec3::new(-1f32, 0f32, -1f32),
-        0.5f32,
-        Box::new(Dielectric::new(1.5f32)),
-    )));
-    hitables.hitables.push(Box::new(Sphere::new(
-        &Vec3::new(-1f32, 0f32, -1f32),
-        -0.45f32,
-        Box::new(Dielectric::new(1.5f32)),
-    )));
+    // hitables.hitables.push(Box::new(Sphere::new(
+    //     &Vec3::new(0f32, 0f32, -1f32),
+    //     0.5f32,
+    //     Box::new(Lambertian::new(&Vec3::new(0.1f32, 0.2f32, 0.5f32))),
+    // )));
+    // hitables.hitables.push(Box::new(Sphere::new(
+    //     &Vec3::new(0f32, -100.5f32, -1f32),
+    //     100f32,
+    //     Box::new(Lambertian::new(&Vec3::new(0.8f32, 0.8f32, 0f32))),
+    // )));
+    // hitables.hitables.push(Box::new(Sphere::new(
+    //     &Vec3::new(1f32, 0f32, -1f32),
+    //     0.5f32,
+    //     Box::new(Metal::new(&Vec3::new(0.8f32, 0.6f32, 0.2f32), 0.0f32)),
+    // )));
+    // hitables.hitables.push(Box::new(Sphere::new(
+    //     &Vec3::new(-1f32, 0f32, -1f32),
+    //     0.5f32,
+    //     Box::new(Dielectric::new(1.5f32)),
+    // )));
+    // hitables.hitables.push(Box::new(Sphere::new(
+    //     &Vec3::new(-1f32, 0f32, -1f32),
+    //     -0.45f32,
+    //     Box::new(Dielectric::new(1.5f32)),
+    // )));
 
-    let look_from = Vec3::new(3f32, 3f32, 2f32);
-    let look_at = Vec3::new(0f32, 0f32, -1f32);
-    let focus_distance = length(&(look_from - look_at));
-    let aperture = 2f32;
+    let look_from = Vec3::new(13f32, 2f32, 3f32);
+    let look_at = Vec3::new(0f32, 0f32, 0f32);
+    let focus_distance = 10f32; //length(&(look_from - look_at));
+    let aperture = 0.1f32; //2f32;
 
     let mut rng = rand::thread_rng();
     let camera = Camera::new(
@@ -526,13 +610,13 @@ fn create_ppm_file() -> std::io::Result<()> {
         20f32,
         width as f32 / height as f32,
         aperture,
-        focus_distance
+        focus_distance,
     );
 
     for y in (0..height).rev() {
         for x in 0..width {
             let mut color = Vec3::zero();
-            let samples = 100;
+            let samples = 50;
             for _ in 0..samples {
                 let u = ((x as f32) + rng.gen_range(0f32, 1f32)) / (width - 1) as f32;
                 let v = ((y as f32) + rng.gen_range(0f32, 1f32)) / (height - 1) as f32;
