@@ -33,7 +33,7 @@ impl Material for Dielectric {
         let reflect_prob: f32;
         let mut cosine: f32;
         if dot(&ray.direction, &hit.normal) > 0f32 {
-            outward_normal = -&hit.normal;
+            outward_normal = -hit.normal;
             ni_over_nt = self.reflective_index;
             cosine = dot(&ray.direction, &hit.normal) / length(&ray.direction);
             cosine = (1f32
@@ -102,10 +102,7 @@ impl Metal {
 impl Material for Metal {
     fn scatter(&self, ray: &Ray, hit: &Hit) -> Option<(Vec3, Ray)> {
         let reflected = reflect(&normalize(&ray.direction), &hit.normal);
-        let scattered = Ray::new(
-            &hit.p,
-            &(&reflected + &(&random_in_unit_sphere() * self.fuzz)),
-        );
+        let scattered = Ray::new(&hit.p, &(reflected + random_in_unit_sphere() * self.fuzz));
         if dot(&scattered.direction, &hit.normal) > 0f32 {
             return Some((self.albedo, scattered));
         }
@@ -115,8 +112,8 @@ impl Material for Metal {
 
 impl Material for Lambertian {
     fn scatter(&self, _: &Ray, hit: &Hit) -> Option<(Vec3, Ray)> {
-        let target = &(&hit.p + &hit.normal) + &random_in_unit_sphere();
-        Some((self.albedo, Ray::new(&hit.p, &(&target - &hit.p))))
+        let target = (hit.p + hit.normal) + random_in_unit_sphere();
+        Some((self.albedo, Ray::new(&hit.p, &(target - hit.p))))
     }
 }
 
@@ -128,19 +125,27 @@ struct Camera {
 }
 
 impl Camera {
-    fn new() -> Self {
+    fn new(look_from: &Vec3, look_at: &Vec3, up: &Vec3, vertical_fov: f32, aspect: f32) -> Self {
+        let theta = vertical_fov * std::f32::consts::PI / 180f32;
+        let half_height = (theta * 0.5f32).tan();
+        let half_width = aspect * half_height;
+        let w = normalize(&(*look_from - *look_at));
+        let u = normalize(&cross(&up, &w));
+        let v = cross(&w, &u);
         Camera {
-            origin: Vec3::zero(),
-            lower_left_corner: Vec3::new(-2_f32, -1_f32, -1_f32),
-            horizontal: Vec3::new(4f32, 0f32, 0f32),
-            vertical: Vec3::new(0f32, 2f32, 0f32),
+            origin: *look_from,
+            lower_left_corner: *look_from - (u * half_width) - (v * half_height) - w,
+            //lower_left_corner: &(look_from - &(&u * half_width)) - &(&(&v * half_height) - &w),
+            horizontal: u * (half_width * 2f32),
+            vertical: v * (half_height * 2f32),
         }
     }
 
     fn ray(&self, u: f32, v: f32) -> Ray {
         Ray::new(
             &self.origin,
-            &(&(&self.lower_left_corner + &(&self.horizontal * u)) + &(&self.vertical * v)),
+            //&(&(&self.lower_left_corner + &(&self.horizontal * u)) + &(&(&self.vertical * v) - &self.origin)),
+            &(self.lower_left_corner + self.horizontal * u + self.vertical * v - self.origin),
         )
     }
 }
@@ -192,7 +197,7 @@ struct Hit<'a> {
 
 impl Hitable for Sphere {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit> {
-        let oc = &ray.origin - &self.center;
+        let oc = ray.origin - self.center;
         let a = length_sq(&ray.direction);
         let b = dot(&oc, &ray.direction);
         let c = length_sq(&oc) - self.radius * self.radius;
@@ -203,7 +208,7 @@ impl Hitable for Sphere {
                 return Some(Hit {
                     t: temp,
                     p: ray.point_at_t(temp),
-                    normal: &(&ray.point_at_t(temp) - &self.center) / self.radius,
+                    normal: (ray.point_at_t(temp) - self.center) / self.radius,
                     material: self.material.as_ref(),
                 });
             }
@@ -212,7 +217,7 @@ impl Hitable for Sphere {
                 return Some(Hit {
                     t: temp,
                     p: ray.point_at_t(temp),
-                    normal: &(&ray.point_at_t(temp) - &self.center) / self.radius,
+                    normal: (ray.point_at_t(temp) - self.center) / self.radius,
                     material: self.material.as_ref(),
                 });
             }
@@ -252,7 +257,7 @@ impl Ray {
     }
 
     fn point_at_t(&self, t: f32) -> Vec3 {
-        &self.origin + &(&self.direction * t)
+        self.origin + (self.direction * t)
     }
 }
 
@@ -283,7 +288,7 @@ impl Vec3 {
     }
 }
 
-impl Neg for &Vec3 {
+impl Neg for Vec3 {
     type Output = Vec3;
     fn neg(self) -> Self::Output {
         Vec3 {
@@ -294,7 +299,7 @@ impl Neg for &Vec3 {
     }
 }
 
-impl Add for &Vec3 {
+impl Add for Vec3 {
     type Output = Vec3;
     fn add(self, rhs: Self) -> Self::Output {
         Vec3 {
@@ -305,7 +310,7 @@ impl Add for &Vec3 {
     }
 }
 
-impl Sub for &Vec3 {
+impl Sub for Vec3 {
     type Output = Vec3;
     fn sub(self, rhs: Self) -> Self::Output {
         Vec3 {
@@ -316,7 +321,7 @@ impl Sub for &Vec3 {
     }
 }
 
-impl Mul<f32> for &Vec3 {
+impl Mul<f32> for Vec3 {
     type Output = Vec3;
     fn mul(self, rhs: f32) -> Self::Output {
         Vec3 {
@@ -327,9 +332,9 @@ impl Mul<f32> for &Vec3 {
     }
 }
 
-impl Mul<&Vec3> for &Vec3 {
+impl Mul<Vec3> for Vec3 {
     type Output = Vec3;
-    fn mul(self, rhs: &Vec3) -> Self::Output {
+    fn mul(self, rhs: Vec3) -> Self::Output {
         Vec3 {
             x: self.x * rhs.x,
             y: self.y * rhs.y,
@@ -338,7 +343,7 @@ impl Mul<&Vec3> for &Vec3 {
     }
 }
 
-impl Div<f32> for &Vec3 {
+impl Div<f32> for Vec3 {
     type Output = Vec3;
     fn div(self, rhs: f32) -> Self::Output {
         Vec3 {
@@ -362,13 +367,13 @@ fn length_sq(vec: &Vec3) -> f32 {
 }
 
 fn normalize(vec: &Vec3) -> Vec3 {
-    vec / length(&vec)
+    *vec / length(vec)
 }
 
 fn cross(lhs: &Vec3, rhs: &Vec3) -> Vec3 {
     Vec3 {
         x: lhs.y * rhs.z - lhs.z * rhs.y,
-        y: lhs.x * rhs.z - lhs.z * rhs.x,
+        y: lhs.z * rhs.x - lhs.x * rhs.z,
         z: lhs.x * rhs.y - lhs.y * rhs.x,
     }
 }
@@ -377,12 +382,12 @@ fn random_in_unit_sphere() -> Vec3 {
     let mut rng = rand::thread_rng();
     let mut p: Vec3;
     loop {
-        p = &(&Vec3::new(
+        p = (Vec3::new(
             rng.gen_range(0f32, 1f32),
             rng.gen_range(0f32, 1f32),
             rng.gen_range(0f32, 1f32),
         ) * 2f32)
-            - &Vec3::one();
+            - Vec3::one();
         if length_sq(&p) < 1f32 {
             break;
         }
@@ -395,7 +400,7 @@ fn next_color(ray: &Ray, hitable: &Hitable, depth: u32) -> Vec3 {
         Some(hit) => {
             if depth < 50 {
                 if let Some(next) = hit.material.scatter(&ray, &hit) {
-                    return &next_color(&next.1, hitable, depth + 1) * &next.0;
+                    return next_color(&next.1, hitable, depth + 1) * next.0;
                 } else {
                     return Vec3::zero();
                 }
@@ -406,13 +411,13 @@ fn next_color(ray: &Ray, hitable: &Hitable, depth: u32) -> Vec3 {
         None => {
             let unit_dir = normalize(&ray.direction);
             let t = 0.5f32 * unit_dir.y + 1f32;
-            &(&Vec3::one() * (1f32 - t)) + &(&Vec3::new(0.5f32, 0.7f32, 1f32) * t)
+            (Vec3::one() * (1f32 - t)) + (Vec3::new(0.5f32, 0.7f32, 1f32) * t)
         }
     }
 }
 
 fn reflect(vec: &Vec3, normal: &Vec3) -> Vec3 {
-    vec - &(normal * (dot(vec, normal) * 2f32))
+    *vec - (*normal * (dot(vec, normal) * 2f32))
 }
 
 fn refract(vec: &Vec3, normal: &Vec3, ni_over_nt: f32) -> Option<Vec3> {
@@ -420,7 +425,7 @@ fn refract(vec: &Vec3, normal: &Vec3, ni_over_nt: f32) -> Option<Vec3> {
     let dt = dot(&uv, &normal);
     let discriminant = 1f32 - ni_over_nt * ni_over_nt * (1f32 - dt * dt);
     if discriminant > 0f32 {
-        Some(&(&(&uv - &(normal * dt)) * ni_over_nt) - &(normal * discriminant.sqrt()))
+        Some(((uv - (*normal * dt)) * ni_over_nt) - (*normal * discriminant.sqrt()))
     } else {
         None
     }
@@ -448,6 +453,17 @@ fn create_ppm_file() -> std::io::Result<()> {
     writer.write_fmt(format_args!("P3\n{} {}\n255\n", width, height))?;
 
     let mut hitables = Hitables::new();
+    //    let r = (std::f32::consts::PI / 4f32).cos();
+    //    hitables.hitables.push(Box::new(Sphere::new(
+    //        &Vec3::new(-r, 0f32, -1f32),
+    //        r,
+    //        Box::new(Lambertian::new(&Vec3::new(0f32, 0f32, 1f32))),
+    //    )));
+    //    hitables.hitables.push(Box::new(Sphere::new(
+    //        &Vec3::new(r, 0f32, -1f32),
+    //        r,
+    //        Box::new(Lambertian::new(&Vec3::new(1f32, 0f32, 0f32))),
+    //    )));
     hitables.hitables.push(Box::new(Sphere::new(
         &Vec3::new(0f32, 0f32, -1f32),
         0.5f32,
@@ -475,7 +491,13 @@ fn create_ppm_file() -> std::io::Result<()> {
     )));
 
     let mut rng = rand::thread_rng();
-    let camera = Camera::new();
+    let camera = Camera::new(
+        &Vec3::new(-2f32, 2f32, 1f32),
+        &Vec3::new(0f32, 0f32, -1f32),
+        &Vec3::new(0f32, 1f32, 0f32),
+        90f32,
+        width as f32 / height as f32,
+    );
 
     for y in (0..height).rev() {
         for x in 0..width {
@@ -484,10 +506,10 @@ fn create_ppm_file() -> std::io::Result<()> {
             for _ in 0..samples {
                 let u = ((x as f32) + rng.gen_range(0f32, 1f32)) / (width - 1) as f32;
                 let v = ((y as f32) + rng.gen_range(0f32, 1f32)) / (height - 1) as f32;
-                color = &color + &next_color(&camera.ray(u, v), &hitables, 0);
+                color = color + next_color(&camera.ray(u, v), &hitables, 0);
             }
 
-            color = &color / samples as f32;
+            color = color / samples as f32;
             color = Vec3::new(color.x.sqrt(), color.y.sqrt(), color.z.sqrt());
 
             let (ir, ig, ib) = (
@@ -551,6 +573,7 @@ mod tests {
     use super::normalize;
     use super::Hitable;
     use super::Hitables;
+    use super::Lambertian;
     use super::Ray;
     use super::Sphere;
     use super::Vec3;
@@ -568,7 +591,7 @@ mod tests {
         let lhs = Vec3::new(1_f32, 2_f32, 3_f32);
         let rhs = Vec3::new(4_f32, 5_f32, 6_f32);
 
-        let result = &lhs + &rhs;
+        let result = lhs + rhs;
         assert_eq!(result.x, 5_f32);
         assert_eq!(result.y, 7_f32);
         assert_eq!(result.z, 9_f32);
@@ -581,7 +604,7 @@ mod tests {
             y: 2_f32,
             z: 3_f32,
         };
-        let result = -&vec;
+        let result = -vec;
         assert_eq!(result.x, -vec.x);
         assert_eq!(result.y, -vec.y);
         assert_eq!(result.z, -vec.z);
@@ -592,7 +615,7 @@ mod tests {
         let lhs = Vec3::new(4_f32, 5_f32, 6_f32);
         let rhs = Vec3::new(1_f32, 4_f32, 2_f32);
 
-        let result = &lhs - &rhs;
+        let result = lhs - rhs;
         assert_eq!(result.x, 3_f32);
         assert_eq!(result.y, 1_f32);
         assert_eq!(result.z, 4_f32);
@@ -605,7 +628,7 @@ mod tests {
             y: 2_f32,
             z: 3_f32,
         };
-        let result = &vec * 2_f32;
+        let result = vec * 2_f32;
 
         assert_eq!(result.x, 2_f32);
         assert_eq!(result.y, 4_f32);
@@ -619,7 +642,7 @@ mod tests {
             y: 20_f32,
             z: 50_f32,
         };
-        let result = &vec / 2_f32;
+        let result = vec / 2_f32;
 
         assert_eq!(result.x, 4_f32);
         assert_eq!(result.y, 10_f32);
@@ -720,7 +743,7 @@ mod tests {
         let cross_result = cross(&lhs, &rhs);
 
         assert_eq!(cross_result.x, 0_f32);
-        assert_eq!(cross_result.y, 1_f32);
+        assert_eq!(cross_result.y, -1_f32);
         assert_eq!(cross_result.z, 0_f32);
     }
 
@@ -762,7 +785,11 @@ mod tests {
 
     #[test]
     fn ray_hit_sphere() {
-        let sphere = Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32);
+        let sphere = Sphere::new(
+            &Vec3::new(0f32, 0f32, -1f32),
+            0.5f32,
+            Box::new(Lambertian::new(&Vec3::new(0f32, 0f32, 1f32))),
+        );
         let hit = sphere.hit(
             &Ray::new(&Vec3::zero(), &Vec3::new(0f32, 0f32, -1f32)),
             0f32,
@@ -773,7 +800,11 @@ mod tests {
 
     #[test]
     fn ray_miss_sphere() {
-        let sphere = Sphere::new(&Vec3::new(0f32, 0f32, -1f32), 0.5f32);
+        let sphere = Sphere::new(
+            &Vec3::new(0f32, 0f32, -1f32),
+            0.5f32,
+            Box::new(Lambertian::new(&Vec3::new(0f32, 0f32, 1f32))),
+        );
         let hit = sphere.hit(
             &Ray::new(&Vec3::new(0f32, 1f32, 0f32), &Vec3::new(0f32, 0f32, -1f32)),
             0f32,
@@ -785,12 +816,15 @@ mod tests {
     #[test]
     fn ray_hitables() {
         let mut hitables = Hitables::new();
-        hitables
-            .hitables
-            .push(Box::new(Sphere::new(&Vec3::new(0f32, 0f32, -5f32), 0.5f32)));
+        hitables.hitables.push(Box::new(Sphere::new(
+            &Vec3::new(0f32, 0f32, -5f32),
+            0.5f32,
+            Box::new(Lambertian::new(&Vec3::new(0f32, 0f32, 1f32))),
+        )));
         hitables.hitables.push(Box::new(Sphere::new(
             &Vec3::new(0f32, 0f32, -10f32),
             0.5f32,
+            Box::new(Lambertian::new(&Vec3::new(0f32, 0f32, 1f32))),
         )));
 
         let ray = Ray::new(&Vec3::new(0f32, 0f32, 0f32), &Vec3::new(0f32, 0f32, -1f32));
